@@ -1,12 +1,6 @@
+````sh
 └── .github\workflows
     └── dev-deploy.yml
-└── backendservice/
-    └── src/
-    ├── package.json
-    ├── serverless.yml
-    ├── *.mjs
-    ├── nodemon.json
-    ├── *.js
 └── frontend-infra/
     └── frontend-infra/
         ├── __init__.py
@@ -20,4 +14,17 @@
     ├── requirements.txt
     ├── setup.py
     ├── source.bat
-└── .gitignore
+└──frontendfiles/
+    └── public/
+    └── src/
+    ├── .prettierignore
+    ├── .prettierrc
+    ├── *.js
+    ├── *.json
+    ├── *.ts
+```
+
+
+
+
+

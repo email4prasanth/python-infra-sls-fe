@@ -1,0 +1,111 @@
+name: Deploy S3, Cf in the development environemnt using aws-cdk
+on: 
+  push:
+    branch:
+      - develop-cicd
+
+jobs:
+  aws-infra:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-infra
+    env:
+      ENVIRONMENT: dev
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 22
+
+      - name: Instal AWS CDK
+        run: npm install -g aws-cdk
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Install Python dependencies
+        # working-directory: infrastructure
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+ 
+      - name: Bootstrap CDK
+        run: cdk bootstrap aws://180294218712/us-east-1
+
+      - name: CDK Synth
+        # working-directory: infrastructure
+        run: cdk synth --context env=${{ env.ENVIRONMENT }}
+
+      - name: CDK Deploy
+        # working-directory: infrastructure
+        run: cdk deploy --all --context env=${{ env.ENVIRONMENT }} --require-approval never
+
+  deploy-serverless:
+    needs: aws-infra
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontendfiles
+
+    env:
+      ENVIRONMENT: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Debug environment
+        run: |
+          echo "Environment: $ENVIRONMENT"
+          echo "Running command: npm run build:$ENVIRONMENT"
+
+      # ADD THIS BUILD STEP
+      - name: Build frontend
+        run: npm run build:$ENVIRONMENT
+        env:
+          VITE_API_BASE_URL: "https://ypsykhuu2d.execute-api.us-east-1.amazonaws.com/api/v1"
+          VITE_STRIPE_DASHBOARD_URL: "https://dashboard.stripe.com/login"
+
+      - name: List build output
+        run: ls -la dist/
+
+      - name: Deploy to S3
+        run: |
+          # Corrected output reference (aws-infra vs deploy-serverless)
+          aws s3 sync ./dist/ s3://${{ needs.aws-infra.outputs.s3_bucket_name }} \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ needs.aws-infra.outputs.cloudfront_id }} \
+            --paths "/*"
